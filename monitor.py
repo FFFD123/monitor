@@ -9,7 +9,7 @@ import time
 # ─── Configuración ────────────────────────────────────────────────────────────
 RSS_URL = "https://puntoahorro.com/feed/?post_type=product"
 # Tiempo máximo hacia atrás para considerar un producto como "nuevo" (15 min)
-MAX_AGE_MINUTES = 15
+MAX_AGE_MINUTES = 999999  # Para pruebas, lo ponemos muy alto para ver todos los productos
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
@@ -70,15 +70,25 @@ def extract_image(entry) -> str:
 
 # ─── Notificaciones (Telegram / Discord) ──────────────────────────────────────
 def notify_telegram(product):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID: return
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        log.error("Faltan credenciales de Telegram")
+        return
+
     text = f"🛍️ *¡Nuevo!* {product['title']}\n💰 {product['price']}\n🔗 [Ver]({product['link']})"
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/send" + ("Photo" if product["image"] else "Message")
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "parse_mode": "Markdown"}
+    
     if product["image"]:
-        payload.update({"photo": product["image"], "caption": text})
+        url     = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
+        payload = {"chat_id": str(TELEGRAM_CHAT_ID), "photo": product["image"],
+                   "caption": text, "parse_mode": "Markdown"}
     else:
-        payload["text"] = text
-    requests.post(url, json=payload, timeout=10)
+        url     = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {"chat_id": str(TELEGRAM_CHAT_ID), "text": text, "parse_mode": "Markdown"}
+
+    r = requests.post(url, json=payload, timeout=10)
+    if r.status_code == 200:
+        log.info(f"✅ Telegram OK: {product['title']}")
+    else:
+        log.error(f"❌ Telegram error {r.status_code}: {r.text}")  # ← esto te dirá exactamente qué falla
 
 def notify_discord(product):
     if not DISCORD_WEBHOOK: return
